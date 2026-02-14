@@ -2,118 +2,107 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
-import plotly.graph_objects as go
 import joblib
+from sklearn.metrics import silhouette_score
+import os
 
-# --- PAGE CONFIG ---
-st.set_page_config(page_title="Pro Cluster Analytics", layout="wide", page_icon="📈")
+# --- 1. PAGE SETUP ---
+st.set_page_config(page_title="AI Strategy Hub", layout="wide", page_icon="📈")
 
-# --- ASSETS LOADING ---
+# --- 2. LOAD ASSETS (Sahi Tareeqa) ---
 @st.cache_resource
-def load_assets():
-    try:
-        model = joblib.load('customer_segmentation_model.pkl')
-        scaler = joblib.load('data_scaler.pkl')
-        cluster_info = joblib.load('cluster_map.pkl')
-        return model, scaler, cluster_info
-    except:
-        return None, None, None
+def load_all_assets():
+    # Check if files exist to avoid crash
+    files = ['customer_segmentation_model.pkl', 'data_scaler.pkl', 'cluster_map.pkl', 'Mall_Customers.csv']
+    for f in files:
+        if not os.path.exists(f):
+            st.error(f"Missing File: {f}. Please upload it to GitHub.")
+            return None, None, None, None
+            
+    m = joblib.load('customer_segmentation_model.pkl')
+    s = joblib.load('data_scaler.pkl')
+    c = joblib.load('cluster_map.pkl')
+    d = pd.read_csv('Mall_Customers.csv')
+    return m, s, c, d
 
-model, scaler, cluster_info = load_assets()
+model, scaler, cluster_info, df = load_all_assets()
 
-# --- CUSTOM STYLING ---
+# --- 3. UI STYLING ---
 st.markdown("""
     <style>
-    .main { background-color: #f0f2f6; }
-    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    .stApp { background-color: #f8f9fa; }
+    .main-box { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
     </style>
     """, unsafe_allow_html=True)
 
-# --- SIDEBAR ---
-with st.sidebar:
-    st.title("🛠️ Analytics Studio")
-    input_mode = st.radio("Select Input Mode:", ["Manual Entry", "CSV Batch Upload"])
-    st.divider()
-    if model:
-        st.success("Model Status: Online")
-    else:
-        st.error("Model Status: Offline")
+# --- 4. NAVIGATION ---
+if model is not None:
+    # Adding cluster column to main df for visualizations
+    X_vals = df[['Annual Income (k$)', 'Spending Score (1-100)']].values
+    X_scaled = scaler.transform(X_vals)
+    df['Cluster'] = model.predict(X_scaled)
 
-# --- MAIN INTERFACE ---
-st.title("🚀 Professional Customer Segmentation Dashboard")
-st.write("Analyze customer behavior through Advanced K-Means Clustering.")
-
-if input_mode == "Manual Entry":
-    col1, col2 = st.columns([1, 2])
+    st.title("💎 Professional Customer Analytics Dashboard")
     
-    with col1:
-        st.subheader("📝 Customer Profile")
-        age = st.number_input("Age", 18, 100, 30)
-        income = st.slider("Annual Income (k$)", 1, 200, 50)
-        spending = st.slider("Spending Score (1-100)", 1, 100, 50)
-        
-        if st.button("Generate Insights", use_container_width=True):
-            input_data = np.array([[income, spending]])
-            scaled_data = scaler.transform(input_data)
-            cluster_id = model.predict(scaled_data)[0]
-            info = cluster_info[cluster_id]
-            
-            st.markdown(f"""
-                <div style="background:{info['color']}22; border-left: 5px solid {info['color']}; padding:20px; border-radius:10px;">
-                    <h3 style="color:{info['color']};">{info['label']}</h3>
-                    <p>This customer is classified as <b>{info['label']}</b> based on the mathematical centroids of your market data.</p>
-                </div>
-            """, unsafe_allow_html=True)
+    tab1, tab2, tab3 = st.tabs(["🎯 Individual Prediction", "📊 Market Intelligence", "🚨 Anomaly Lab"])
 
-    with col2:
-        st.subheader("📊 3D Cluster Topology")
-        # Sample data visualization for context
-        df_sample = pd.read_csv('Mall_Customers.csv')
-        X_scaled = scaler.transform(df_sample[['Annual Income (k$)', 'Spending Score (1-100)']].values)
-        df_sample['Cluster'] = model.predict(X_all_scaled if 'X_all_scaled' in locals() else X_scaled)
-        
-        fig = px.scatter_3d(df_sample, x='Age', y='Annual Income (k$)', z='Spending Score (1-100)',
-                            color=df_sample['Cluster'].astype(str), 
-                            title="3D Market Segmentation",
-                            template="plotly_white")
-        st.plotly_chart(fig, use_container_width=True)
-
-elif input_mode == "CSV Batch Upload":
-    uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
-    
-    if uploaded_file is not None:
-        user_df = pd.read_csv(uploaded_file)
-        
-        # Check if required columns exist
-        required = ['Annual Income (k$)', 'Spending Score (1-100)']
-        if all(col in user_df.columns for col in required):
-            # Processing
-            X = user_df[required].values
-            X_scaled = scaler.transform(X)
-            user_df['Cluster'] = model.predict(X_scaled)
+    # --- TAB 1: INDIVIDUAL PREDICTION ---
+    with tab1:
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            st.subheader("Customer Input")
+            inc = st.number_input("Annual Income (k$)", 10, 200, 50)
+            spd = st.slider("Spending Score (1-100)", 1, 100, 50)
             
-            # Dashboard Metrics
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Total Customers", len(user_df))
-            m2.metric("Avg. Income", f"${user_df[required[0]].mean():.1f}k")
-            m3.metric("Avg. Spend Score", f"{user_df[required[1]].mean():.1f}")
-            
-            # 2D Interactive Plot
-            st.subheader("📈 Segment Distribution")
-            fig_2d = px.scatter(user_df, x=required[0], y=required[1], color='Cluster',
-                                hover_data=['Age'] if 'Age' in user_df.columns else None,
-                                title="2D Segment Map")
-            st.plotly_chart(fig_2d, use_container_width=True)
-            
-            # Data Preview
-            with st.expander("View Processed Data"):
-                st.dataframe(user_df, use_container_width=True)
+            if st.button("Analyze Customer"):
+                scaled_in = scaler.transform([[inc, spd]])
+                pred = model.predict(scaled_in)[0]
+                label = cluster_info[pred]['label']
+                color = cluster_info[pred]['color']
                 
-            # Download Button
-            csv = user_df.to_csv(index=False).encode('utf-8')
-            st.download_button("Download Segmented Data", csv, "segmented_customers.csv", "text/csv")
-        else:
-            st.warning(f"CSV must contain these columns: {required}")
+                st.markdown(f"""
+                    <div style="padding:20px; border-radius:10px; background:{color}22; border-left:10px solid {color};">
+                        <h2 style="color:{color};">{label}</h2>
+                        <p>This customer is classified as <b>{label}</b>.</p>
+                    </div>
+                """, unsafe_allow_html=True)
+        
+        with col2:
+            st.subheader("Position in Market (3D)")
+            fig3d = px.scatter_3d(df, x='Age', y='Annual Income (k$)', z='Spending Score (1-100)',
+                                  color='Cluster', opacity=0.7, template="plotly_white")
+            st.plotly_chart(fig3d, use_container_width=True)
+
+    # --- TAB 2: MARKET INTELLIGENCE ---
+    with tab2:
+        st.subheader("Accuracy & Correlation")
+        m1, m2 = st.columns(2)
+        
+        # Silhouette Score Calculation
+        sil_score = silhouette_score(X_scaled, df['Cluster'])
+        m1.metric("Silhouette Score (Accuracy)", f"{sil_score:.2f}")
+        m2.metric("Total Customers Analyzed", len(df))
+        
+        st.divider()
+        st.write("### Feature Relationships")
+        corr_fig = px.imshow(df[['Age', 'Annual Income (k$)', 'Spending Score (1-100)']].corr(), text_auto=True)
+        st.plotly_chart(corr_fig, use_container_width=True)
+
+    # --- TAB 3: ANOMALY LAB ---
+    with tab3:
+        st.subheader("Outlier Detection")
+        # Logic: Customers far from centroids
+        dist = np.min(model.transform(X_scaled), axis=1)
+        thresh = np.percentile(dist, 95)
+        df['Anomaly'] = dist > thresh
+        
+        anom_df = df[df['Anomaly'] == True]
+        st.warning(f"Detected {len(anom_df)} customers with unusual behavior (Outliers).")
+        
+        fig_anom = px.scatter(df, x='Annual Income (k$)', y='Spending Score (1-100)', 
+                              color='Anomaly', color_discrete_map={True: 'red', False: 'blue'})
+        st.plotly_chart(fig_anom, use_container_width=True)
+        st.dataframe(anom_df)
 
 st.divider()
-st.caption("Developed by Gemini AI for Computational Mathematics Portfolio | University of Karachi")
+st.caption("Computational Mathematics Dept | University of Karachi | Portfolio Project")
