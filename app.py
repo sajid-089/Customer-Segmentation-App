@@ -1,90 +1,102 @@
 import streamlit as st
 import joblib
 import numpy as np
+import pandas as pd
+import plotly.express as px  # Professional charts ke liye
 import os
 
-# --- PROFESSIONAL UI CONFIG ---
-st.set_page_config(
-    page_title="Customer Analytics Pro",
-    page_icon="📊",
-    layout="wide"
-)
+# --- PAGE CONFIG ---
+st.set_page_config(page_title="Analytics Pro | Customer Insights", layout="wide")
 
-# Custom CSS for a sleek look
+# --- CUSTOM CSS (Clean & Modern) ---
 st.markdown("""
     <style>
-    .main { background-color: #f5f7f9; }
-    .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #2c3e50; color: white; }
-    .reportview-container .main .footer { text-align: center; }
+    .stApp { background-color: #F8F9FA; }
+    div[data-testid="stMetricValue"] { font-size: 28px; color: #1E3A8A; }
+    .main-card { 
+        background-color: white; 
+        padding: 25px; 
+        border-radius: 15px; 
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        margin-bottom: 20px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-class DeploymentEngine:
-    """Class to handle all ML operations safely."""
-    def __init__(self):
-        self.model_path = 'customer_segmentation_model.pkl'
-        self.scaler_path = 'data_scaler.pkl'
-        self.map_path = 'cluster_map.pkl'
-
+# --- ENGINE CLASS ---
+class AnalyticsEngine:
     @st.cache_resource
-    def load_resources(_self):
-        """Loads and caches all ML assets."""
-        if not all(os.path.exists(p) for p in [_self.model_path, _self.scaler_path, _self.map_path]):
-            return None, None, None
-        
-        m = joblib.load(_self.model_path)
-        s = joblib.load(_self.scaler_path)
-        c = joblib.load(_self.map_path)
-        return m, s, c
+    def load_assets(_self):
+        m = joblib.load('customer_segmentation_model.pkl')
+        s = joblib.load('data_scaler.pkl')
+        c = joblib.load('cluster_map.pkl')
+        d = pd.read_csv('Mall_Customers.csv')
+        return m, s, c, d
 
-# --- APP EXECUTION ---
-engine = DeploymentEngine()
-model, scaler, cluster_info = engine.load_resources()
+engine = AnalyticsEngine()
+model, scaler, cluster_info, df = engine.load_assets()
 
-# Sidebar - Professional Inputs
+# --- HEADER ---
+st.title("📊 Enterprise Customer Analytics")
+st.caption("Strategic Segmentation Dashboard | Powered by Computational Math")
+
+# --- LAYOUT: SIDEBAR & MAIN ---
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=100)
-    st.title("Control Panel")
-    st.info("Enter customer metrics to classify segments.")
-    
-    income = st.number_input("Annual Income (k$)", 1, 200, 50, help="Customer's yearly earnings")
+    st.header("📍 Input Parameters")
+    income = st.slider("Annual Income (k$)", 10, 150, 50)
     spending = st.slider("Spending Score (1-100)", 1, 100, 50)
-    analyze_btn = st.button("RUN ANALYTICS")
+    st.divider()
+    st.write("### Project Metadata")
+    st.write("**Model:** K-Means Clustering")
+    st.write("**Accuracy:** Silhouette Optimized")
 
-# Main Dashboard
-st.title("📊 Customer Segmentation Analytics")
-st.markdown("---")
+# --- MAIN DASHBOARD ---
+tab1, tab2 = st.tabs(["🎯 Prediction", "📈 Dataset Analysis"])
 
-if model is None:
-    st.error("❌ Critical Error: Model files not found. Please run the trainer script first.")
-else:
-    col1, col2 = st.columns([1, 1])
-
+with tab1:
+    col1, col2 = st.columns([1, 2])
+    
     with col1:
-        st.subheader("💡 Input Summary")
-        st.write(f"**Target Income:** ${income}k")
-        st.write(f"**Target Spend Score:** {spending}/100")
+        st.markdown('<div class="main-card">', unsafe_allow_html=True)
+        st.subheader("Customer Profile")
+        
+        # Prediction Logic
+        input_scaled = scaler.transform(np.array([[income, spending]]))
+        cluster_id = model.predict(input_scaled)[0]
+        res = cluster_info[cluster_id]
+        
+        st.metric("Detected Segment", res['label'])
+        
+        st.markdown(f"""
+            <div style="padding:15px; border-radius:10px; border-left: 5px solid {res['color']}; background: {res['color']}15;">
+                <h4 style="color:{res['color']}; margin:0;">{res['label']}</h4>
+                <p style="font-size:12px; color:#555;">Segment characterized by income-to-spend ratio.</p>
+            </div>
+        """, unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    if analyze_btn:
-        with col2:
-            # Prediction Logic
-            input_scaled = scaler.transform(np.array([[income, spending]]))
-            cluster_id = model.predict(input_scaled)[0]
-            data = cluster_info[cluster_id]
+    with col2:
+        st.markdown('<div class="main-card">', unsafe_allow_html=True)
+        st.subheader("Segment Visualization")
+        
+        # Plotly Interactive Chart
+        fig = px.scatter(df, x='Annual Income (k$)', y='Spending Score (1-100)', 
+                         color=df['Cluster'].astype(str),
+                         title="Market Map",
+                         color_discrete_sequence=px.colors.qualitative.Safe)
+        
+        # Add the User's point
+        fig.add_scatter(x=[income], y=[spending], mode='markers', 
+                        marker=dict(size=15, color='black', symbol='x'),
+                        name='Current Input')
+        
+        fig.update_layout(showlegend=False, height=400, margin=dict(l=0, r=0, t=30, b=0))
+        st.plotly_chart(fig, use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-            # Professional Display
-            st.subheader("🎯 Model Prediction")
-            st.metric(label="Predicted Segment", value=data['label'])
-            
-            st.markdown(f"""
-                <div style="border-left: 10px solid {data['color']}; padding: 20px; background-color: white; border-radius: 5px; box-shadow: 2px 2px 10px rgba(0,0,0,0.1);">
-                    <h3 style="color: {data['color']}; margin: 0;">{data['label']} Category</h3>
-                    <p style="color: #666;">This customer has been classified based on spending patterns and income variance.</p>
-                </div>
-            """, unsafe_allow_html=True)
-    else:
-        with col2:
-            st.info("Waiting for input... Click 'RUN ANALYTICS' to see the classification.")
+with tab2:
+    st.subheader("Raw Data Insights")
+    st.dataframe(df.style.background_gradient(subset=['Annual Income (k$)'], cmap='Greens'), use_container_width=True)
 
-st.markdown("---")
-st.caption("Computational Mathematics Dept - University of Karachi | Engineering-Grade ML Deployment")
+st.divider()
+st.center = st.caption("© 2026 | Built for Data Science Portfolio")
