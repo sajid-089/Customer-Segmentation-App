@@ -2,107 +2,128 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
+import plotly.graph_objects as go
 import joblib
 from sklearn.metrics import silhouette_score
-import os
 
-# --- 1. PAGE SETUP ---
-st.set_page_config(page_title="AI Strategy Hub", layout="wide", page_icon="📈")
+# --- PAGE CONFIG ---
+st.set_page_config(page_title="AI Strategy Hub", layout="wide", page_icon="💎")
 
-# --- 2. LOAD ASSETS (Sahi Tareeqa) ---
-@st.cache_resource
-def load_all_assets():
-    # Check if files exist to avoid crash
-    files = ['customer_segmentation_model.pkl', 'data_scaler.pkl', 'cluster_map.pkl', 'Mall_Customers.csv']
-    for f in files:
-        if not os.path.exists(f):
-            st.error(f"Missing File: {f}. Please upload it to GitHub.")
-            return None, None, None, None
-            
-    m = joblib.load('customer_segmentation_model.pkl')
-    s = joblib.load('data_scaler.pkl')
-    c = joblib.load('cluster_map.pkl')
-    d = pd.read_csv('Mall_Customers.csv')
-    return m, s, c, d
-
-model, scaler, cluster_info, df = load_all_assets()
-
-# --- 3. UI STYLING ---
+# --- CUSTOM CSS ---
 st.markdown("""
     <style>
-    .stApp { background-color: #f8f9fa; }
-    .main-box { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+    .reportview-container { background: #f8f9fa; }
+    .metric-card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border-top: 5px solid #1E3A8A; }
+    .recommendation-box { background: #e0f2fe; padding: 20px; border-radius: 10px; border-left: 8px solid #0369a1; margin: 15px 0; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 4. NAVIGATION ---
-if model is not None:
-    # Adding cluster column to main df for visualizations
-    X_vals = df[['Annual Income (k$)', 'Spending Score (1-100)']].values
-    X_scaled = scaler.transform(X_vals)
-    df['Cluster'] = model.predict(X_scaled)
+# --- ASSETS LOADING ---
+@st.cache_resource
+def load_assets():
+    try:
+        m = joblib.load('customer_segmentation_model.pkl')
+        s = joblib.load('data_scaler.pkl')
+        c = joblib.load('cluster_map.pkl')
+        d = pd.read_csv('Mall_Customers.csv')
+        return m, s, c, d
+    except:
+        return None, None, None, None
 
-    st.title("💎 Professional Customer Analytics Dashboard")
+model, scaler, cluster_info, df_base = load_assets()
+
+# --- BUSINESS LOGIC: RECOMMENDATIONS ---
+def get_recommendation(label):
+    recommendations = {
+        'Target/VIP': "💎 **Strategy:** High-tier loyalty programs and exclusive early access to luxury collections.",
+        'Careful': "🛡️ **Strategy:** Personalized discounts and value-for-money bundles to encourage spending.",
+        'Spendthrifts': "🔥 **Strategy:** Flash sales and trendy 'limited time' offers to capitalize on impulse buying.",
+        'Sensible': "📊 **Strategy:** Cashback offers and utility-based marketing to build long-term trust.",
+        'Standard': "⚖️ **Strategy:** Cross-selling related products and standard newsletter engagement."
+    }
+    return recommendations.get(label, "Continue standard engagement.")
+
+# --- SIDEBAR & NAVIGATION ---
+with st.sidebar:
+    st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=80)
+    st.title("Strategic Hub")
+    mode = st.radio("Navigation", ["Inference Engine", "Market Intelligence", "Anomaly Lab"])
+    st.divider()
+    st.info("Status: System Operational ✅")
+
+# --- MAIN INTERFACE ---
+if mode == "Inference Engine":
+    st.title("🎯 Real-Time Customer Inference")
     
-    tab1, tab2, tab3 = st.tabs(["🎯 Individual Prediction", "📊 Market Intelligence", "🚨 Anomaly Lab"])
-
-    # --- TAB 1: INDIVIDUAL PREDICTION ---
-    with tab1:
-        col1, col2 = st.columns([1, 2])
-        with col1:
-            st.subheader("Customer Input")
-            inc = st.number_input("Annual Income (k$)", 10, 200, 50)
-            spd = st.slider("Spending Score (1-100)", 1, 100, 50)
+    col1, col2 = st.columns([1, 2])
+    
+    with col1:
+        st.subheader("Customer Input")
+        age = st.slider("Age Profile", 18, 80, 35)
+        income = st.number_input("Annual Income (k$)", 10, 200, 60)
+        spend = st.number_input("Spending Score (1-100)", 1, 100, 50)
+        
+        if st.button("Generate Strategy", use_container_width=True):
+            input_scaled = scaler.transform([[income, spend]])
+            cluster_id = model.predict(input_scaled)[0]
+            data = cluster_info[cluster_id]
             
-            if st.button("Analyze Customer"):
-                scaled_in = scaler.transform([[inc, spd]])
-                pred = model.predict(scaled_in)[0]
-                label = cluster_info[pred]['label']
-                color = cluster_info[pred]['color']
-                
-                st.markdown(f"""
-                    <div style="padding:20px; border-radius:10px; background:{color}22; border-left:10px solid {color};">
-                        <h2 style="color:{color};">{label}</h2>
-                        <p>This customer is classified as <b>{label}</b>.</p>
-                    </div>
-                """, unsafe_allow_html=True)
-        
-        with col2:
-            st.subheader("Position in Market (3D)")
-            fig3d = px.scatter_3d(df, x='Age', y='Annual Income (k$)', z='Spending Score (1-100)',
-                                  color='Cluster', opacity=0.7, template="plotly_white")
-            st.plotly_chart(fig3d, use_container_width=True)
+            st.markdown(f"""<div class='metric-card'>
+                <h4 style='color:{data['color']}'>{data['label']} Segment</h4>
+                <h1>Cluster #{cluster_id}</h1>
+            </div>""", unsafe_allow_html=True)
+            
+            st.markdown(f"<div class='recommendation-box'>{get_recommendation(data['label'])}</div>", unsafe_allow_html=True)
 
-    # --- TAB 2: MARKET INTELLIGENCE ---
-    with tab2:
-        st.subheader("Accuracy & Correlation")
-        m1, m2 = st.columns(2)
+    with col2:
+        st.subheader("Market Positioning (3D)")
+        # Background clusters for 3D visualization
+        X_bg = df_base[['Annual Income (k$)', 'Spending Score (1-100)']].values
+        X_bg_scaled = scaler.transform(X_bg)
+        df_base['Cluster'] = model.predict(X_bg_scaled)
         
-        # Silhouette Score Calculation
-        sil_score = silhouette_score(X_scaled, df['Cluster'])
-        m1.metric("Silhouette Score (Accuracy)", f"{sil_score:.2f}")
-        m2.metric("Total Customers Analyzed", len(df))
-        
-        st.divider()
-        st.write("### Feature Relationships")
-        corr_fig = px.imshow(df[['Age', 'Annual Income (k$)', 'Spending Score (1-100)']].corr(), text_auto=True)
-        st.plotly_chart(corr_fig, use_container_width=True)
+        fig_3d = px.scatter_3d(df_base, x='Age', y='Annual Income (k$)', z='Spending Score (1-100)',
+                              color='Cluster', template="plotly_dark", height=500)
+        fig_3d.add_scatter3d(x=[age], y=[income], z=[spend], mode='markers', 
+                             marker=dict(size=12, color='white', symbol='diamond'), name='Current Probe')
+        st.plotly_chart(fig_3d, use_container_width=True)
 
-    # --- TAB 3: ANOMALY LAB ---
-    with tab3:
-        st.subheader("Outlier Detection")
-        # Logic: Customers far from centroids
-        dist = np.min(model.transform(X_scaled), axis=1)
-        thresh = np.percentile(dist, 95)
-        df['Anomaly'] = dist > thresh
-        
-        anom_df = df[df['Anomaly'] == True]
-        st.warning(f"Detected {len(anom_df)} customers with unusual behavior (Outliers).")
-        
-        fig_anom = px.scatter(df, x='Annual Income (k$)', y='Spending Score (1-100)', 
-                              color='Anomaly', color_discrete_map={True: 'red', False: 'blue'})
-        st.plotly_chart(fig_anom, use_container_width=True)
-        st.dataframe(anom_df)
+elif mode == "Market Intelligence":
+    st.title("📈 Statistical Insights & Accuracy")
+    
+    # Math Flex: Silhouette Score
+    X_scaled = scaler.transform(df_base[['Annual Income (k$)', 'Spending Score (1-100)']].values)
+    score = silhouette_score(X_scaled, model.predict(X_scaled))
+    
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Silhouette Accuracy", f"{score:.2f}", help="Measures how well clusters are separated. 1.0 is perfect.")
+    m2.metric("Total Data Points", len(df_base))
+    m3.metric("Optimum K-Value", model.n_clusters)
+    
+    st.divider()
+    
+    # Correlation Heatmap
+    st.subheader("Feature Correlation Matrix")
+    corr = df_base[['Age', 'Annual Income (k$)', 'Spending Score (1-100)']].corr()
+    fig_heat = px.imshow(corr, text_auto=True, aspect="auto", color_continuous_scale='RdBu_r')
+    st.plotly_chart(fig_heat, use_container_width=True)
+
+elif mode == "Anomaly Lab":
+    st.title("🚨 Anomaly & Outlier Detection")
+    st.write("Detecting customers who do not fit the standard mathematical patterns.")
+    
+    # Basic Outlier Logic (Distance from Centroid)
+    distances = np.min(model.transform(X_scaled), axis=1)
+    threshold = np.percentile(distances, 95) # Top 5% as outliers
+    df_base['Is_Anomaly'] = distances > threshold
+    
+    anomalies = df_base[df_base['Is_Anomaly'] == True]
+    st.warning(f"Detected {len(anomalies)} anomalies in the dataset (Unusual behavior patterns).")
+    st.dataframe(anomalies, use_container_width=True)
+    
+    fig_anom = px.scatter(df_base, x='Annual Income (k$)', y='Spending Score (1-100)', 
+                         color='Is_Anomaly', color_discrete_sequence=['#1E3A8A', '#EF4444'])
+    st.plotly_chart(fig_anom, use_container_width=True)
 
 st.divider()
-st.caption("Computational Mathematics Dept | University of Karachi | Portfolio Project")
+st.caption("Computational Mathematics Project | End-to-End MLOps Pipeline | Developed by Gemini")
